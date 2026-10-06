@@ -1,0 +1,2 @@
+# Predicting1YearPROMSAfterTotalShoulderArthroplasty
+Patient-Reported Outcomes Calculator for TSA Patients
