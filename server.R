@@ -1,196 +1,151 @@
-# load 1-year TSA model object - 10/9/2023
-library(shiny);library(shinythemes);library(plyr);library(dplyr);library(ggplot2);library(reshape2);library(rms);library(betareg)
+# server side
+function(input, output, session) {
 
-#Loading all of the models stored in RData file
-load(file = 'TSA_MODELS.RData')
+  #Calculating BMI based on input height/weight
+  bmi <- reactive({
+    703 * (input$weight / ((input$feet*12 + input$inches)^2))
+  })
+  
+  #Functionality to move to next page when buttons are pressed
+  observeEvent(input$start, {
+    updateTabsetPanel(session,
+                      inputId = 'mainPage',
+                      selected = 'demographics')
+  })
+  
+  observeEvent(input$nextPage1, {
+    updateTabsetPanel(session,
+                      inputId = 'mainPage',
+                      selected = 'PRO')
+  })
+  
+  
+  #####PSS#####################
+  ##############################
+  
+  #Calculating current PSS Total
+  pss_total <- reactive({
+    if(input$havePSS == 'Yes') {
+      input$inputPSS
+    } else {
+      inds <- names(input)[grepl('PSS_Q', names(input))]
+      vals <- c()
+      for(i in 1:length(inds)) {
+        vals <- c(vals, input[[inds[i]]])
+      }
+      sum(as.numeric(vals), na.rm = T)
+    }
+  })
+  
+  #Print it out below survey
+  output$pssCalculated <- renderText({
+    paste0('Your current PSS Total score is ', round(pss_total()))
+  })
+  
+  ####################################
+  #Getting all current predicted values
+  current_predictions <- reactive({
+    
+    #PSS Total
+    PSS_TOTAL <- pss_total_preds(age = input$age/12, # rescale data by iqr
+                       gender = input$gender,
+                       race = input$race,
+                       bmi = bmi()/7.5,
+                       cci = input$cci/2,
+                       smoking = input$smoking,
+                       education = input$education/4,
+                       adi = input$adi/35,
+                       insurance = input$insurance,
+                       mcs0 = input$mcs0/16.88,
+                       psydx = input$psydx,
+                       opioid = input$opioid,
+                       chronicpain = input$chronicpain,
+                       priorsurgery = input$priorsurgery,
+                       dximplant = input$dximplant,
+                       gbl = input$gbl,
+                       hcomp = input$hcomp,
+                       sprotatorcuff = input$sprotatorcuff,
+                       pss0 = pss_total()/20.92)
+    
+    # PSS Pain
+    PSS_PAIN <- pss_pain_preds(age = input$age/12, # rescale data by iqr
+                                 gender = input$gender,
+                                 race = input$race,
+                                 bmi = bmi()/7.5,
+                                 cci = input$cci/2,
+                                 smoking = input$smoking,
+                                 education = input$education/4,
+                                 adi = input$adi/35,
+                                 insurance = input$insurance,
+                                 mcs0 = input$mcs0/16.88,
+                                 psydx = input$psydx,
+                                 opioid = input$opioid,
+                                 chronicpain = input$chronicpain,
+                                 priorsurgery = input$priorsurgery,
+                                 dximplant = input$dximplant,
+                                 gbl = input$gbl,
+                                 hcomp = input$hcomp,
+                                 sprotatorcuff = input$sprotatorcuff,
+                                 pss0 = pss_total()/20.92)
+    # PSS Function
+    PSS_FUNC <- pss_func_preds(age = input$age/12, # rescale data by iqr
+                               gender = input$gender,
+                               race = input$race,
+                               bmi = bmi()/7.5,
+                               cci = input$cci/2,
+                               smoking = input$smoking,
+                               education = input$education/4,
+                               adi = input$adi/35,
+                               insurance = input$insurance,
+                               mcs0 = input$mcs0/16.88,
+                               psydx = input$psydx,
+                               opioid = input$opioid,
+                               chronicpain = input$chronicpain,
+                               priorsurgery = input$priorsurgery,
+                               dximplant = input$dximplant,
+                               gbl = input$gbl,
+                               hcomp = input$hcomp,
+                               sprotatorcuff = input$sprotatorcuff,
+                               pss0 = pss_total()/20.92)
+    # PSS Satisfaction
+    PSS_SAT <- pss_sat_preds(age = input$age, 
+                              gender = input$gender,
+                              race = input$race,
+                              bmi = bmi(),
+                              cci = input$cci,
+                              smoking = input$smoking,
+                              education = input$education,
+                              adi = input$adi,
+                              insurance = input$insurance,
+                              mcs0 = input$mcs0,
+                              psydx = input$psydx,
+                              opioid = input$opioid,
+                              chronicpain = input$chronicpain,
+                              priorsurgery = input$priorsurgery,
+                              dximplant = input$dximplant,
+                              gbl = input$gbl,
+                              hcomp = input$hcomp,
+                              sprotatorcuff = input$sprotatorcuff,
+                              pss0 = pss_total())
+    
+    preds <- data.frame(
+      `Item` = c("Predicted 1-Year PSS Total",
+                 "Predicted 1-Year PSS Pain",
+                 "Predicted 1-Year PSS Function",
+                 "Predicted 1-Year PSS Satisfaction"),
+      Result = c(PSS_TOTAL, PSS_PAIN, PSS_FUNC, PSS_SAT))
+    preds
+  })
+  
+  output$currentPreds <- renderTable({
+    current_predictions()
+  }
+  ,
+  rownames = FALSE
+  )
+  
+  ####################################
 
-#Functions that return predictions
-##PSS Total
-pss_total_preds <- function(age,
-                        gender,
-                        race,
-                        bmi,
-                        cci,
-                        smoking,
-                        education,
-                        adi,
-                        insurance,
-                        mcs0,
-                        psydx,
-                        opioid,
-                        chronicpain,
-                        priorsurgery,
-                        dximplant,
-                        gbl,
-                        hcomp,
-                        sprotatorcuff,
-                        pss0
-                        ) {
-   
-    #Creating data frame
-    new_dat <- data.frame('Age_c' = age,
-                           'Sex' = gender,
-                           'Race' = race,
-                           'BMI_c' = bmi,
-                           'CCI_c' = cci,
-                           'Smoking' = smoking,
-                           'Education_c' = education,
-                           'ADI_c' = adi,
-                           'Insurance' = insurance,
-                           'MCS0_c' = mcs0,
-                           'PsyDx' = psydx,
-                           'Opioid' = opioid,
-                           'ChronicPain' = chronicpain,
-                           'PriorSurg' = priorsurgery,
-                           'DxImplant' = dximplant,
-                           'GBL' = gbl,
-                           'HComp' = hcomp,
-                           'SPRotatorCuff' = sprotatorcuff,
-                           'PSS0_c' = pss0)
-    round(100*colMeans(do.call(rbind.data.frame, lapply(pss1_mod_beta, predict, newdata = new_dat, type = "link"))), digits = 1)
-}
 
-pss_pain_preds <- function(age,
-                            gender,
-                            race,
-                            bmi,
-                            cci,
-                            smoking,
-                            education,
-                            adi,
-                            insurance,
-                            mcs0,
-                            psydx,
-                            opioid,
-                            chronicpain,
-                            priorsurgery,
-                            dximplant,
-                            gbl,
-                            hcomp,
-                            sprotatorcuff,
-                            pss0
-) {
-   
-  #Creating data frame
-  new_dat <- data.frame('Age_c' = age,
-                        'Sex' = gender,
-                        'Race' = race,
-                        'BMI_c' = bmi,
-                        'CCI_c' = cci,
-                        'Smoking' = smoking,
-                        'Education_c' = education,
-                        'ADI_c' = adi,
-                        'Insurance' = insurance,
-                        'MCS0_c' = mcs0,
-                        'PsyDx' = psydx,
-                        'Opioid' = opioid,
-                        'ChronicPain' = chronicpain,
-                        'PriorSurg' = priorsurgery,
-                        'DxImplant' = dximplant,
-                        'GBL' = gbl,
-                        'HComp' = hcomp,
-                        'SPRotatorCuff' = sprotatorcuff,
-                        'PSS0_c' = pss0)
-  round(30*colMeans(do.call(rbind.data.frame, lapply(pain1_mod_beta, predict, newdata = new_dat, type = "link"))), digits = 1)
-}
 
-pss_func_preds <- function(age,
-                            gender,
-                            race,
-                            bmi,
-                            cci,
-                            smoking,
-                            education,
-                            adi,
-                            insurance,
-                            mcs0,
-                            psydx,
-                            opioid,
-                            chronicpain,
-                            priorsurgery,
-                            dximplant,
-                            gbl,
-                            hcomp,
-                            sprotatorcuff,
-                            pss0
-) {
-   
-  #Creating data frame
-  new_dat <- data.frame('Age_c' = age,
-                        'Sex' = gender,
-                        'Race' = race,
-                        'BMI_c' = bmi,
-                        'CCI_c' = cci,
-                        'Smoking' = smoking,
-                        'Education_c' = education,
-                        'ADI_c' = adi,
-                        'Insurance' = insurance,
-                        'MCS0_c' = mcs0,
-                        'PsyDx' = psydx,
-                        'Opioid' = opioid,
-                        'ChronicPain' = chronicpain,
-                        'PriorSurg' = priorsurgery,
-                        'DxImplant' = dximplant,
-                        'GBL' = gbl,
-                        'HComp' = hcomp,
-                        'SPRotatorCuff' = sprotatorcuff,
-                        'PSS0_c' = pss0)
-  round(60*colMeans(do.call(rbind.data.frame, lapply(func1_mod_beta, predict, newdata = new_dat, type = "link"))), digits = 1)
-}
-
-pss_sat_preds <- function(age,
-                           gender,
-                           race,
-                           bmi,
-                           cci,
-                           smoking,
-                           education,
-                           adi,
-                           insurance,
-                           mcs0,
-                           psydx,
-                           opioid,
-                           chronicpain,
-                           priorsurgery,
-                           dximplant,
-                           gbl,
-                           hcomp,
-                           sprotatorcuff,
-                           pss0
-) {
-   
-  #Creating data frame
-  new_dat <- data.frame('Age' = age,
-                        'Sex' = gender,
-                        'Race' = race,
-                        'BMI' = bmi,
-                        'CCI' = cci,
-                        'Smoking' = smoking,
-                        'Education' = education,
-                        'ADI' = adi,
-                        'Insurance' = insurance,
-                        'MCS0' = mcs0,
-                        'PsyDx' = psydx,
-                        'Opioid' = opioid,
-                        'ChronicPain' = chronicpain,
-                        'PriorSurg' = priorsurgery,
-                        'DxImplant' = dximplant,
-                        'GBL' = gbl,
-                        'HComp' = hcomp,
-                        'SPRotatorCuff' = sprotatorcuff,
-                        'PSS0' = pss0)
-  round(predict(sat, newdata = new_dat, type = "mean"), digits = 1)
-}
-
-#Functions used to generate buttons on questionaires
-pssQuestion <- function(inputId, label) {
-  radioButtons(inputId = inputId,
-               label = span(label,
-                            style = 'font-size:16px'),
-               choices = c('No difficulty' = 3,
-                           'Some difficulty' = 2,
-                           'Much difficulty' = 1,
-                           "Can't do at all" = 0,
-                           "Did not do before injury" = NA),
-               inline = TRUE)
 }
