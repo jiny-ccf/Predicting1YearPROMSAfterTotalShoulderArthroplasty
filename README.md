@@ -269,8 +269,14 @@ This project is released under the **MIT License**. See [`LICENSE`](LICENSE) for
 
 ---
 
-## Acknowledgments
+## Authors
 
-This work was developed using clinical data from the Cleveland Clinic Outcomes Management and Evaluation (OME) program and reflects a collaboration between clinical investigators, biostatisticians, and software developers.
+Developed at Cleveland Clinic as part of the development and deployment of an
+interactive clinical prediction tool for total shoulder arthroplasty outcomes.
 
-For questions regarding the calculator or its clinical interpretation, please refer to the original publication and the live application.
+**Primary developer:** Yuxuan Jin  
+**Affiliation:** Cleveland Clinic
+
+For software questions, please open an issue in this repository.
+For questions about the clinical study or prediction model, please refer to the
+original publication.
